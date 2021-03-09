@@ -32,6 +32,7 @@ from backtrader.utils.py3 import with_metaclass
 
 from .ccxtstore import CCXTStore
 
+from .hfdsclient import runGetCandles
 
 class MetaCCXTFeed(DataBase.__class__):
     def __init__(cls, name, bases, dct):
@@ -93,7 +94,7 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
         if self.p.fromdate:
             self._state = self._ST_HISTORBACK
             self.put_notification(self.DELAYED)
-            self._fetch_ohlcv(self.p.fromdate)
+            self._fetch_ohlcv(self.p.fromdate, dserver=True)
 
         else:
             self._state = self._ST_LIVE
@@ -130,7 +131,7 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
                         self.put_notification(self.LIVE)
                         continue
 
-    def _fetch_ohlcv(self, fromdate=None):
+    def _fetch_ohlcv(self, fromdate=None, dserver=False):
         """Fetch OHLCV data into self._data queue"""
         granularity = self.store.get_granularity(self._timeframe, self._compression)
 
@@ -153,10 +154,14 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
                 print('---- NEW REQUEST ----')
                 print('{} - Requesting: Since TS {} Since date {} granularity {}, limit {}, params'.format(
                     datetime.utcnow(), since, since_dt, granularity, limit, self.p.fetch_ohlcv_params))
-                data = sorted(self.store.fetch_ohlcv(self.p.dataname, timeframe=granularity,
+                if dserver == False:
+                    data = sorted(self.store.fetch_ohlcv(self.p.dataname, timeframe=granularity,
                                                      since=since, limit=limit, params=self.p.fetch_ohlcv_params))
+                else:
+                    data = runGetCandles(self.store.exchange.id, self.p.dataname, tf=granularity, fromdate=since) 
                 try:
                     for i, ohlcv in enumerate(data):
+                        print(ohlcv)
                         tstamp, open_, high, low, close, volume = ohlcv
                         print('{} - Data {}: {} - TS {} Time {}'.format(datetime.utcnow(), i,
                                                                         datetime.utcfromtimestamp(tstamp // 1000),
@@ -166,9 +171,11 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
                     print('Index Error: Data = {}'.format(data))
                 print('---- REQUEST END ----')
             else:
+                if dserver == False:
+                    data = sorted(self.store.fetch_ohlcv(self.p.dataname, timeframe=granularity, since=since, limit=limit, params=self.p.fetch_ohlcv_params))
+                else:
+                    data = runGetCandles(self.store.exchange.id, self.p.dataname, tf=granularity, fromdate=since) 
 
-                data = sorted(self.store.fetch_ohlcv(self.p.dataname, timeframe=granularity,
-                                                     since=since, limit=limit, params=self.p.fetch_ohlcv_params))
 
             # Check to see if dropping the latest candle will help with
             # exchanges which return partial data
