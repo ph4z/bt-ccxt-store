@@ -25,20 +25,21 @@ def runGetCandles(*args, **kwargs):
     candles = loop.run_until_complete(getCandles(*args, **kwargs))
     return [ (candle['mts'], candle['open'], candle['high'], candle['low'], candle['close'], candle['volume']) for candle in candles ]
 
-async def getCandles(exchange, symbol, tf, fromdate, todate=None, url='ws://127.0.0.1:8899'):
+async def getCandles(exchange, symbol, tf, fromdate, todate=None, url='ws://127.0.0.1:45000'):
     if not todate:
         tsto = int(datetime.datetime.utcnow().timestamp()) * 1000
 
     async with websockets.connect(url, max_size=None, close_timeout=3600) as ws:
-        req = ['get.candles', exchange, symbol , tf, 'trades', fromdate, tsto]
+        req = ['get.candles', exchange, {"uiID":symbol} , tf, fromdate, tsto]
+        #req = ['get.candles', exchange, {"restID":symbol.replace('/', '')} , tf, fromdate, tsto]
         await ws.send(orjson.dumps(req))
         while True:
             data = await ws.recv()
             candles = orjson.loads(data)
             if candles[0] == "data.candles":
-                return candles[8]
-            else:
-                print(candles)
+                return candles[6]
+            #else:
+                #print(candles)
         await ws.close()
 
 

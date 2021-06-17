@@ -34,6 +34,9 @@ from .ccxtstore import CCXTStore
 
 from .hfdsclient import runGetCandles
 
+
+#import DataServerClient 
+
 class MetaCCXTFeed(DataBase.__class__):
     def __init__(cls, name, bases, dct):
         '''Class has already been created ... register'''
@@ -134,14 +137,17 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
     def _fetch_ohlcv(self, fromdate=None, dserver=False):
         """Fetch OHLCV data into self._data queue"""
         granularity = self.store.get_granularity(self._timeframe, self._compression)
-
         if fromdate:
             since = int((fromdate - datetime(1970, 1, 1)).total_seconds() * 1000)
+            #print(since)
+            #print(self._last_ts)
         else:
             if self._last_ts > 0:
                 since = self._last_ts
             else:
                 since = None
+                #dserver=True
+    
 
         limit = self.p.ohlcv_limit
 
@@ -152,16 +158,15 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
                 # TESTING
                 since_dt = datetime.utcfromtimestamp(since // 1000) if since is not None else 'NA'
                 print('---- NEW REQUEST ----')
-                print('{} - Requesting: Since TS {} Since date {} granularity {}, limit {}, params'.format(
-                    datetime.utcnow(), since, since_dt, granularity, limit, self.p.fetch_ohlcv_params))
+                print('{} - Requesting: {} Since TS {} Since date {} granularity {}, limit {}, params'.format(
+                    self.p.dataname, datetime.utcnow(), since, since_dt, granularity, limit, self.p.fetch_ohlcv_params))
                 if dserver == False:
                     data = sorted(self.store.fetch_ohlcv(self.p.dataname, timeframe=granularity,
                                                      since=since, limit=limit, params=self.p.fetch_ohlcv_params))
                 else:
-                    data = runGetCandles(self.store.exchange.id, self.p.dataname, tf=granularity, fromdate=since) 
+                    data = sorted(runGetCandles(self.store.exchange.id, self.p.dataname, tf=granularity, fromdate=since), key=lambda tup: tup[0])
                 try:
                     for i, ohlcv in enumerate(data):
-                        print(ohlcv)
                         tstamp, open_, high, low, close, volume = ohlcv
                         print('{} - Data {}: {} - TS {} Time {}'.format(datetime.utcnow(), i,
                                                                         datetime.utcfromtimestamp(tstamp // 1000),
@@ -174,7 +179,7 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
                 if dserver == False:
                     data = sorted(self.store.fetch_ohlcv(self.p.dataname, timeframe=granularity, since=since, limit=limit, params=self.p.fetch_ohlcv_params))
                 else:
-                    data = runGetCandles(self.store.exchange.id, self.p.dataname, tf=granularity, fromdate=since) 
+                    data = sorted(runGetCandles(self.store.exchange.id, self.p.dataname, tf=granularity, fromdate=since), key=lambda tup: tup[0])
 
 
             # Check to see if dropping the latest candle will help with
@@ -188,6 +193,8 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
                 #                                           since=since, limit=limit, params=self.p.fetch_ohlcv_params)):
 
                 if None in ohlcv:
+                    if self.p.debug:
+                        print('Skipping None: {}'.format(ohlcv))
                     continue
 
                 tstamp = ohlcv[0]
@@ -196,11 +203,13 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
                 # if tstamp > (time.time() * 1000):
                 #    continue
 
+                #print('Tstamp: {}, Last_ts: {}'.format(tstamp, self._last_ts))
                 if tstamp > self._last_ts:
                     if self.p.debug:
                         print('Adding: {}'.format(ohlcv))
                     self._data.append(ohlcv)
                     self._last_ts = tstamp
+                    dlen += 1
 
             if dlen == len(self._data):
                 break
